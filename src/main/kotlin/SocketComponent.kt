@@ -1,10 +1,13 @@
 package com.github.devapro.pttdroid.server
 
+import io.ktor.network.sockets.*
 import io.ktor.server.application.*
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
 import io.ktor.websocket.*
 import java.time.Duration
+import java.util.*
+import kotlin.collections.LinkedHashSet
 
 fun Application.configureSockets() {
     install(WebSockets) {
@@ -15,20 +18,19 @@ fun Application.configureSockets() {
     }
 
     routing {
-        webSocket("/echo") {
-            for (frame in incoming) {
-
-//                frame as? Frame.Binary ?: continue
-//                val content = frame.data
-//                send(content)
-
-                frame as? Frame.Text ?: continue
-                val receivedText = frame.readText()
-                if (receivedText.equals("bye", ignoreCase = true)) {
-                    close(CloseReason(CloseReason.Codes.NORMAL, "Client said BYE"))
-                } else {
-                    send(Frame.Text("Hi, $receivedText!"))
+        val connections = Collections.synchronizedSet<DefaultWebSocketSession>(LinkedHashSet())
+        webSocket("/channel/*") {
+            connections += this
+            try {
+                for (frame in incoming) {
+                    connections.filter { it != this }.forEach {
+                        it.send(frame)
+                    }
                 }
+            } catch (e: Exception) {
+                println(e.localizedMessage)
+            } finally {
+                connections -= this
             }
         }
     }
