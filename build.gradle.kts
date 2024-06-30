@@ -1,5 +1,6 @@
 plugins {
     kotlin("jvm") version "1.9.23"
+    application
 }
 
 group = "com.github.devapro.pttdroid.server"
@@ -23,6 +24,11 @@ dependencies {
 tasks.test {
     useJUnitPlatform()
 }
+
 kotlin {
     jvmToolchain(17)
+}
+
+application {
+    mainClass.set("com.github.devapro.pttdroid.server.MainKt")
 }

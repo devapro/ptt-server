@@ -1,6 +1,5 @@
 package com.github.devapro.pttdroid.server
 
-import io.ktor.network.sockets.*
 import io.ktor.server.application.*
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
