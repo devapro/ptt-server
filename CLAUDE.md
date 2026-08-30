@@ -34,7 +34,9 @@ Prerequisite: **JDK 21** (`kotlin { jvmToolchain(21) }` in `build.gradle.kts`; `
 applies the Foojay resolver so Gradle can provision it). Dependency versions (Kotlin 2.4.10,
 Ktor 3.5.2, kotlinx-serialization/coroutines 1.11.0) live in **`gradle/libs.versions.toml`** — this
 repo does have a version catalog now; check that file for exact versions rather than assuming.
-Details: [`docs/deployment.md`](docs/deployment.md).
+Details: [`docs/deployment.md`](docs/deployment.md). The user-facing walkthrough — the one to keep
+in sync when a setup step or a failure mode changes — is
+[`docs/running-your-own.md`](docs/running-your-own.md).
 
 ## Hard rules
 
@@ -43,8 +45,8 @@ Details: [`docs/deployment.md`](docs/deployment.md).
   specific LAN IP into server code — see `docs/configuration.md` for the env-var host/port model,
   `Config.kt`).
 - **Emulators connecting to a server running on the host reach it at `10.0.2.2`, never
-  `localhost`.** This matters when testing against an emulator-hosted client; it's also the
-  client's default host setting.
+  `localhost`.** This matters when testing against an emulator-hosted client; it is also what the
+  client ships as **Relay → Default** (set at build time by its `relay.properties`).
 - Keep `docs/` in sync when changing the wire protocol, routing, or session lifecycle — and
   update [`docs/protocol.md`](docs/protocol.md) *first*, since the client repo treats it as the
   spec.

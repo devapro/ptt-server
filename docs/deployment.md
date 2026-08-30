@@ -1,5 +1,8 @@
 # Deployment
 
+Reference, organised by mechanism. If you are setting a relay up for the first time, follow
+[running-your-own.md](running-your-own.md) instead and come back here for the details.
+
 ## Run in place
 
 ```bash
@@ -190,8 +193,8 @@ enough to survive being on the internet — not a multi-tenant service.
 ## CI
 
 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on push to `main`, tags matching
-`v*`, and pull requests: sets up JDK 21 (Temurin), runs `./gradlew build` (compile + the 14
-`ChannelRelayTest` cases), uploads the test report, builds `distTar`, uploads that artifact, and
+`v*`, and pull requests: sets up JDK 21 (Temurin), runs `./gradlew build` (compile + 45 tests),
+uploads the test report, builds `distTar`, uploads that artifact, and
 (in a second job depending on the first) builds the Docker image.
 
 ## Firewall / LAN notes
@@ -200,7 +203,8 @@ The server binds to `0.0.0.0` by default (all interfaces). For a physical Androi
 same LAN to reach it:
 
 - The host machine's firewall must allow inbound TCP on the configured port (default `8000`).
-- The client must be pointed at the host's LAN IP — set this in the client's Settings screen (see
+- The client must be pointed at the host's LAN IP — **Settings → Relay → Custom**, e.g.
+  `192.168.1.20:8000` (see
   [`ptt-client-android/docs/architecture.md`](../../ptt-client-android/docs/architecture.md)); it
   is no longer a hardcoded literal in source.
 - Both devices need to actually be on the same LAN/subnet (mobile data, guest network isolation,
@@ -212,9 +216,9 @@ same LAN to reach it:
 your development machine and a client in an emulator, the client must connect to
 `10.0.2.2:<port>` — the emulator's special alias for the host loopback interface — never
 `localhost` and never the host's real LAN IP (that's only reachable from a physical device on the
-same network, not from the emulator's virtual network). `10.0.2.2` is also the client's *default*
-host setting out of the box, so an unconfigured debug build on one emulator already points at a
-host-machine server started with defaults. See
+same network, not from the emulator's virtual network). `10.0.2.2` is also what the client ships
+as its **Relay → Default** (set by `relay.properties` at build time), so an unconfigured debug
+build on one emulator already points at a host-machine server started with defaults. See
 [`ptt-client-android/docs/build-and-run.md`](../../ptt-client-android/docs/build-and-run.md) for
 the two-emulator test topology and
 [`/docs/overview.md`](../../docs/overview.md) at the repo root for the full diagram.

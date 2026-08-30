@@ -28,11 +28,10 @@ Tunnel: $url
 
 Client → Settings:
 
-  Host                     $host
-  Port                     443
-  Encrypted connection     on
-  Certificate fingerprint  (leave empty — ngrok presents a publicly trusted certificate)
+  Relay                    Custom, then paste:  $url
+                           The https:// sets port 443 and turns encryption on by itself.
+  Certificate fingerprint  leave empty — ngrok presents a publicly trusted certificate
   Access token             the PTT_AUTH_TOKEN from .env
 
-The relay will be reached at wss://$host/channel/<n>
+Check the "Will connect to" line reads:  wss://$host:443/channel/<n>
 EOF

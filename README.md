@@ -11,6 +11,10 @@ channel**. Everything else — who is on air, whose button is disabled — is a 
 
 ## Run it
 
+**Never done this before?** [`docs/running-your-own.md`](docs/running-your-own.md) is the
+walkthrough — from a spare machine to two handsets talking, with the firewall, the address to
+type into the app, and what each failure looks like. What follows is the short version.
+
 ```bash
 cp .env.example .env                 # then fill in at least PTT_AUTH_TOKEN
 docker compose up -d --build         # 0.0.0.0:8000
@@ -44,10 +48,15 @@ Or without Docker (needs **JDK 21**):
 ./gradlew installDist                # build/install/PTTdroidServer/bin/PTTdroidServer
 ```
 
-Then point the Android client's **Settings → Relay** at this machine:
+Then point the Android client at this machine — **Settings → Relay → Custom**, one address box
+that also takes a whole pasted URL:
 
-- **Emulator** → `10.0.2.2` — inside an emulator `localhost` is the emulator itself
-- **Phone on the same Wi-Fi** → this machine's LAN address, e.g. `192.168.1.20`
+- **Emulator** → nothing to do: `10.0.2.2:8000` is what the app ships as **Relay → Default**,
+  since inside an emulator `localhost` is the emulator itself
+- **Phone on the same Wi-Fi** → this machine's LAN address, e.g. `192.168.1.20:8000`
+
+Building the app for a group that already has a relay? Set it once in the client's
+`relay.properties` and the APK arrives pointing at it.
 
 ## Configuration
 
@@ -152,6 +161,7 @@ warnings.
 
 | | |
 |---|---|
+| [`docs/running-your-own.md`](docs/running-your-own.md) | **Start here** — zero to two handsets talking, and what to do when it does not work |
 | [`docs/protocol.md`](docs/protocol.md) | **Canonical wire protocol (v1)** |
 | [`docs/architecture.md`](docs/architecture.md) | Registry, sessions, floor control, fixed defects |
 | [`docs/configuration.md`](docs/configuration.md) | Every environment variable |
