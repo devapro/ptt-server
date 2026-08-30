@@ -1,0 +1,14 @@
+services:
+  ptt-server:
+    build: .
+    image: ptt-server:local
+    container_name: ptt-server
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      PTT_HOST: 0.0.0.0
+      PTT_PORT: 8000
+      PTT_MAX_AUDIO_FRAME_BYTES: 8192
+      PTT_PING_SECONDS: 15
+      PTT_MAX_CHANNEL: 99

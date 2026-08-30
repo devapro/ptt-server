@@ -1,24 +1,33 @@
 plugins {
-    kotlin("jvm") version "1.9.23"
+    alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.kotlin.serialization)
     application
 }
 
 group = "com.github.devapro.pttdroid.server"
 version = "1.0-SNAPSHOT"
 
-val ktorVersion = "2.3.8"
-
 repositories {
     mavenCentral()
 }
 
 dependencies {
-    implementation("io.ktor:ktor-server-core-jvm:$ktorVersion")
-    implementation("io.ktor:ktor-server-netty-jvm:$ktorVersion")
-    implementation("io.ktor:ktor-server-websockets:$ktorVersion")
-
+    implementation(libs.ktor.server.core)
+    implementation(libs.ktor.server.netty)
+    implementation(libs.ktor.server.websockets)
+    implementation(libs.ktor.server.status.pages)
+    implementation(libs.ktor.server.content.negotiation)
+    implementation(libs.ktor.serialization.kotlinx.json)
+    implementation(libs.kotlinx.serialization.json)
+    implementation(libs.kotlinx.coroutines.core)
+    implementation(libs.slf4j.api)
+    runtimeOnly(libs.logback.classic)
 
     testImplementation(kotlin("test"))
+    testImplementation(libs.ktor.server.test.host)
+    testImplementation(libs.ktor.client.websockets)
+    testImplementation(libs.ktor.client.cio)
+    testImplementation(libs.logback.classic)
 }
 
 tasks.test {
@@ -26,7 +35,7 @@ tasks.test {
 }
 
 kotlin {
-    jvmToolchain(17)
+    jvmToolchain(21)
 }
 
 application {
