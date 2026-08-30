@@ -1,3 +1,12 @@
+# Plaintext relay on a trusted LAN. This is the default because it is the common case: a few
+# handsets on one Wi-Fi network with no certificate to distribute.
+#
+# Everything below reads from the environment (see .env.example), so the same file also serves
+# the TLS and ngrok overlays without edits:
+#
+#   docker compose up -d --build                                  # ws://  on the LAN
+#   docker compose -f docker-compose.yml -f docker-compose.tls.yml up -d --build
+#   docker compose -f docker-compose.yml -f docker-compose.ngrok.yml up -d --build
 services:
   ptt-server:
     build: .
@@ -5,10 +14,25 @@ services:
     container_name: ptt-server
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "${PTT_BIND:-0.0.0.0}:${PTT_PORT:-8000}:${PTT_PORT:-8000}"
     environment:
       PTT_HOST: 0.0.0.0
-      PTT_PORT: 8000
-      PTT_MAX_AUDIO_FRAME_BYTES: 8192
-      PTT_PING_SECONDS: 15
-      PTT_MAX_CHANNEL: 99
+      PTT_PORT: ${PTT_PORT:-8000}
+      PTT_MAX_AUDIO_FRAME_BYTES: ${PTT_MAX_AUDIO_FRAME_BYTES:-8192}
+      PTT_PING_SECONDS: ${PTT_PING_SECONDS:-15}
+      PTT_MAX_CHANNEL: ${PTT_MAX_CHANNEL:-99}
+      PTT_OUTBOUND_QUEUE: ${PTT_OUTBOUND_QUEUE:-64}
+      PTT_MAX_SESSIONS_PER_CHANNEL: ${PTT_MAX_SESSIONS_PER_CHANNEL:-32}
+      # Blank means no authentication — fine on a LAN you control, not fine anywhere else.
+      PTT_AUTH_TOKEN: ${PTT_AUTH_TOKEN:-}
+    volumes:
+      # The TLS keypair, so a restart does not invalidate every client's pinned fingerprint.
+      - ptt-certs:/app/certs
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  ptt-certs:

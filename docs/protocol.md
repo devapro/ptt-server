@@ -27,6 +27,29 @@ ws://<host>:<port>/channel/{channelId}?name={displayName}&v=1
 An invalid channel or unsupported version never opens a session: the server sends one `error`
 text frame, then closes with `CloseReason.VIOLATED_POLICY` (`ChannelRoutes.kt:136-143`).
 
+### Transport
+
+`ws://` and `wss://` are the same protocol; which one applies is a deployment choice, not a
+protocol version. See [configuration.md](configuration.md#tls-and-the-self-signed-certificate).
+
+A relay serving a self-signed certificate is trusted by **SHA-256 fingerprint of the certificate's
+DER encoding**, not by chain — the client pins it and skips hostname verification, because a LAN
+relay's address is not stable enough to name in a certificate. A relay behind a tunnel or a real
+certificate is verified normally, with no pin.
+
+### Headers
+
+| Header | Rule |
+|---|---|
+| `X-PTT-Token` | Required when the relay is started with a token; compared in constant time. Rejected connections get `unauthorized` |
+
+Checked **before** the channel id and the version, so an unauthorised caller cannot use the error
+code to probe which channels exist. `/health` is exempt.
+
+The token is a header rather than a query parameter deliberately: a URL reaches proxy access
+logs, tunnel inspectors and server-side error logging, and a secret that lands in all three is
+not a secret.
+
 ## Framing
 
 WebSocket frame **type is the discriminator** — there is no envelope or header on binary frames:
@@ -52,9 +75,9 @@ config, default 8192) or of odd length is rejected with `frame_too_large` and ne
 
 | Type | Payload | Meaning |
 |---|---|---|
-| `welcome` | `{clientId, channel, peers, audio: {sampleRate, channels, encoding, frameBytes}}` | Sent once, before anything else, right after join. `audio` is fixed: `{16000, 1, "pcm16le", 1280}` |
+| `welcome` | `{clientId, channel, peers, audio: {sampleRate, channels, encoding, frameBytes}}` | Sent once, and it is genuinely the **first frame** on the socket. `audio` is fixed: `{16000, 1, "pcm16le", 1280}` |
 | `floor` | `{holderId?, holderName?, isSelf}` | Who holds the floor, rendered **per recipient** — `isSelf` differs for each session even though the underlying holder is the same (`PttChannel.kt:96-103`) |
-| `peers` | `{count}` | Peer-count update on join/leave, broadcast to the whole channel |
+| `peers` | `{count}` | Peer-count update on join/leave, broadcast to the channel **except the joiner** — their count is already in `welcome`, and sending it would land ahead of the welcome |
 | `error` | `{code, message}` | A rejected request or handshake failure |
 
 ### Error codes (`Messages.kt:77-84`)
@@ -67,6 +90,8 @@ config, default 8192) or of odd length is rejected with `frame_too_large` and ne
 | `not_floor_holder` | Binary audio frame sent by a session that doesn't hold the floor |
 | `frame_too_large` | Binary frame over the configured max, or odd-length |
 | `malformed_message` | Text frame that doesn't parse as a known `ClientMessage` |
+| `unauthorized` | The relay requires a token and the `X-PTT-Token` header was missing or wrong |
+| `channel_full` | The channel already holds `PTT_MAX_SESSIONS_PER_CHANNEL` sessions |
 
 `not_floor_holder` and `frame_too_large` are rate-limited to at most one report per second per
 session (`PttSession.shouldReportError()`, `PttSession.kt:50-58`) — otherwise a client streaming
@@ -156,4 +181,4 @@ Protocol v1, as described above, fixes every defect the pre-refactor version of 
 recorded as "planned": channel isolation is enforced (not just parsed), floor control is
 server-side, and both are covered by
 [`ChannelRelayTest.kt`](../src/test/kotlin/com/github/devapro/pttdroid/server/ChannelRelayTest.kt)
-(14 tests, all passing).
+(45 tests, all passing).

@@ -22,6 +22,20 @@ class ChannelRegistry {
     }
 
     /**
+     * Joins [channelId] unless it already holds [capacity] sessions, in which case null comes
+     * back and the channel is left exactly as it was — including being reaped again if this
+     * call is what created it.
+     */
+    suspend fun tryJoinChannel(channelId: Int, session: PttSession, capacity: Int): PttChannel? {
+        val channel = mutex.withLock { channels.getOrPut(channelId) { PttChannel(channelId) } }
+        if (channel.tryJoin(session, capacity) != null) return channel
+        mutex.withLock {
+            if (channels[channelId] === channel && channel.isEmpty()) channels.remove(channelId)
+        }
+        return null
+    }
+
+    /**
      * Removes [session] from [channelId] and discards the channel if it is now empty. The
      * emptiness check happens under the registry lock, so it cannot race a concurrent join.
      */

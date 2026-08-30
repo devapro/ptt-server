@@ -72,11 +72,41 @@ own writer coroutine, not the sender's.
 | No floor control | Every sender's frames relayed to everyone, always | `PttChannel` tracks one holder per channel; non-holder audio dropped with rate-limited `not_floor_holder` |
 | No graceful shutdown | N/A | `Runtime.addShutdownHook` calls `server.stop(gracePeriodMillis, timeoutMillis)` (`Main.kt:25-30`) |
 
+## Transport security
+
+Two connectors, both optional, both serving the same application module:
+
+| | Connector | Env |
+|---|---|---|
+| Plaintext | `ws://` on `PTT_PORT` | `PTT_HTTP_ENABLED` (default on) |
+| TLS | `wss://` on `PTT_TLS_PORT` | `PTT_TLS_ENABLED` (default off) |
+
+`tls/ServerKeyStore` loads `PTT_TLS_KEYSTORE`, or generates a self-signed keypair into it when the
+file is absent, and publishes the certificate's SHA-256 fingerprint to the log and to
+`<keystore>.sha256`. The client trusts that fingerprint rather than a chain — there is no domain
+to prove ownership of on a LAN — which makes the keystore's *stability* the thing that matters:
+generating a fresh keypair per boot would lock out every paired client.
+
+Ktor's certificate builder still defaults to SHA-1 and to its own sample principal
+(`O=JetBrains, C=RU`); both are overridden.
+
+## Access control
+
+`PTT_AUTH_TOKEN` is one shared secret, presented in an `X-PTT-Token` header and compared with
+`MessageDigest.isEqual`. The check runs first in the WebSocket handler — before the version and
+channel checks — so an unauthorised caller cannot use the error code to learn which channels
+exist. `/health` is exempt so a `HEALTHCHECK` or load balancer still works.
+
+`PTT_MAX_SESSIONS_PER_CHANNEL` bounds a channel. The test happens inside `PttChannel`'s own lock
+(`tryJoin`), because a capacity check outside it lets a burst of simultaneous handshakes all read
+"not full yet" and pile in. A refused join reaps the channel it may have just created.
+
 ## Not implemented
 
-- **No auth** — anything that can reach the port and send a valid `v`/`channelId` can join and
-  transmit once it holds the floor. There is no token, password, or per-client identity beyond the
-  server-generated `clientId` (a random UUID) and the client-supplied display `name`.
-- **No TLS** — this is plain `ws://`, not `wss://`. See the client's
-  [`known-issues.md`](../../ptt-client-android/docs/known-issues.md) for the corresponding
-  cleartext-networking note on the Android side.
+- **No accounts** — one shared token for everybody. No per-client identity beyond the
+  server-generated `clientId` (a random UUID) and the client-supplied display `name`, no
+  revocation, no audit trail.
+- **No handshake rate limiting** — the per-channel cap bounds how many sessions exist, not how
+  fast someone can try tokens.
+- **No certificate rotation story** — pinning is excellent for a handful of handsets on a LAN and
+  awkward beyond that. A permanently public relay wants a real certificate or a tunnel.

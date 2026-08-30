@@ -1,0 +1,22 @@
+# TLS with a self-signed certificate, generated on first boot into the ptt-certs volume.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.tls.yml up -d --build
+#   ./deploy/fingerprint.sh          # the SHA-256 to paste into the client
+#
+# The plaintext connector is switched off here rather than merely left unpublished: a relay
+# that speaks both is one misconfigured firewall away from carrying audio in the clear.
+services:
+  ptt-server:
+    ports: !override
+      - "${PTT_BIND:-0.0.0.0}:${PTT_TLS_PORT:-8443}:${PTT_TLS_PORT:-8443}"
+    environment:
+      PTT_HTTP_ENABLED: "false"
+      PTT_TLS_ENABLED: "true"
+      PTT_TLS_PORT: ${PTT_TLS_PORT:-8443}
+      PTT_TLS_KEYSTORE: /app/certs/ptt.p12
+      PTT_TLS_KEYSTORE_PASSWORD: ${PTT_TLS_KEYSTORE_PASSWORD:?set PTT_TLS_KEYSTORE_PASSWORD in .env}
+      PTT_TLS_KEY_ALIAS: ${PTT_TLS_KEY_ALIAS:-ptt}
+      # Names and addresses the certificate is issued for. The client trusts it by fingerprint
+      # rather than by name, so this only matters to curl, browsers and other CA-checking tools.
+      PTT_TLS_SAN: ${PTT_TLS_SAN:-localhost,127.0.0.1}
+      PTT_TLS_VALIDITY_DAYS: ${PTT_TLS_VALIDITY_DAYS:-3650}

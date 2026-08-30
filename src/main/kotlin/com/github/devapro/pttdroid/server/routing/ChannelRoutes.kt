@@ -28,6 +28,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.serialization.SerializationException
 import org.slf4j.LoggerFactory
+import java.security.MessageDigest
 import java.util.UUID
 
 private val log = LoggerFactory.getLogger("ChannelRoutes")
@@ -51,6 +52,14 @@ fun Route.channelRoutes(config: ServerConfig, registry: ChannelRegistry) {
     }
 
     webSocket("/channel/{channelId}") {
+        if (!isAuthorised(config)) {
+            rejectHandshake(
+                ErrorCodes.UNAUTHORIZED,
+                "This relay requires an access token in the $TOKEN_HEADER header",
+            )
+            return@webSocket
+        }
+
         val version = call.request.queryParameters["v"]?.toIntOrNull()
         if (version != null && version != PROTOCOL_VERSION) {
             rejectHandshake(
@@ -97,7 +106,16 @@ fun Route.channelRoutes(config: ServerConfig, registry: ChannelRegistry) {
             }
         }
 
-        val channel = registry.joinChannel(channelId, session)
+        val channel = registry.tryJoinChannel(channelId, session, config.maxSessionsPerChannel)
+        if (channel == null) {
+            session.closeQueue()
+            writer.cancel()
+            rejectHandshake(
+                ErrorCodes.CHANNEL_FULL,
+                "Channel $channelId already has ${config.maxSessionsPerChannel} listeners",
+            )
+            return@webSocket
+        }
         val peers = channel.peerCount()
         log.info(
             "Session {} ({}) joined channel {} — {} peer(s)",
@@ -131,6 +149,32 @@ fun Route.channelRoutes(config: ServerConfig, registry: ChannelRegistry) {
             )
         }
     }
+}
+
+/**
+ * Header the shared secret travels in.
+ *
+ * Deliberately not a query parameter: a URL ends up in proxy access logs, in ngrok's request
+ * inspector, and in this server's own error logging, and a token that leaks into all three is
+ * not a token.
+ */
+const val TOKEN_HEADER: String = "X-PTT-Token"
+
+/**
+ * True when no token is configured, or the client presented the right one.
+ *
+ * The comparison is constant-time — a plain `==` on strings returns as soon as two bytes
+ * differ, which over enough attempts leaks the token one character at a time.
+ */
+private fun io.ktor.server.websocket.DefaultWebSocketServerSession.isAuthorised(
+    config: ServerConfig,
+): Boolean {
+    if (!config.requiresAuth) return true
+    val presented = call.request.headers[TOKEN_HEADER] ?: return false
+    return MessageDigest.isEqual(
+        presented.toByteArray(Charsets.UTF_8),
+        config.accessToken.toByteArray(Charsets.UTF_8),
+    )
 }
 
 private suspend fun io.ktor.server.websocket.DefaultWebSocketServerSession.rejectHandshake(

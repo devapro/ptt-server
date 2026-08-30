@@ -1,0 +1,6 @@
+version: "3"
+# Bind the agent's inspector to the container's external interface so the published
+# 127.0.0.1:4040 mapping reaches it. It defaults to localhost *inside* the container, where
+# nothing on the host can see it. The published mapping keeps it off the network.
+web_addr: 0.0.0.0:4040
+log_level: info

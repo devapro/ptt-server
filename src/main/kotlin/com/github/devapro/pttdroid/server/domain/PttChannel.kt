@@ -25,7 +25,21 @@ class PttChannel(val id: Int) {
 
     suspend fun join(session: PttSession): Int = mutex.withLock {
         sessions[session.id] = session
-        broadcastLocked(Peers(sessions.size))
+        broadcastLocked(Peers(sessions.size), exceptId = session.id)
+        sessions.size
+    }
+
+    /**
+     * Admits [session] only while the channel is below [capacity], and reports the new peer
+     * count. Returns null when the channel is full.
+     *
+     * The check has to happen under the same lock as the insert: a capacity test outside it
+     * lets a burst of simultaneous handshakes all read the same "not full yet" and pile in.
+     */
+    suspend fun tryJoin(session: PttSession, capacity: Int): Int? = mutex.withLock {
+        if (sessions.size >= capacity) return@withLock null
+        sessions[session.id] = session
+        broadcastLocked(Peers(sessions.size), exceptId = session.id)
         sessions.size
     }
 
@@ -109,7 +123,14 @@ class PttChannel(val id: Int) {
         }
     }
 
-    private fun broadcastLocked(message: Peers) {
-        for (session in sessions.values) session.send(message)
+    /**
+     * [exceptId] exists for the join case: the protocol promises `welcome` is the first thing
+     * a client sees, and the joiner's own count is already in it. Sending them a `peers` from
+     * inside their join would land ahead of the welcome and make that promise false.
+     */
+    private fun broadcastLocked(message: Peers, exceptId: String? = null) {
+        for ((id, session) in sessions) {
+            if (id != exceptId) session.send(message)
+        }
     }
 }

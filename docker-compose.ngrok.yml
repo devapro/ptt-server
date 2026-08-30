@@ -1,0 +1,47 @@
+# Reach the relay from outside the LAN through an ngrok tunnel.
+#
+#   cp .env.example .env && edit it        # NGROK_AUTHTOKEN and PTT_AUTH_TOKEN are required
+#   docker compose -f docker-compose.yml -f docker-compose.ngrok.yml up -d --build
+#   ./deploy/ngrok-url.sh                  # prints the client settings to type in
+#
+# ngrok terminates TLS with its own publicly trusted certificate, so the client connects with
+# TLS on and *no* pinned fingerprint — the self-signed path in docker-compose.tls.yml is for
+# reaching the relay directly. Do not combine the two overlays; TLS-to-TLS gains nothing here
+# and ngrok would have to be told to skip verification of your self-signed certificate.
+services:
+  ptt-server:
+    ports: !override
+      # Loopback only. The tunnel reaches the relay over the compose network, so the port does
+      # not need to be on a public interface — and this one carries audio in the clear.
+      - "127.0.0.1:${PTT_PORT:-8000}:${PTT_PORT:-8000}"
+    environment:
+      # A tunnel is a public address. Without a token, its URL is the only thing standing
+      # between a stranger and your channel, and ngrok URLs are not secret.
+      PTT_AUTH_TOKEN: ${PTT_AUTH_TOKEN:?set PTT_AUTH_TOKEN in .env before opening a tunnel}
+      PTT_TRUST_FORWARDED_HEADERS: "true"
+
+  ngrok:
+    image: ngrok/ngrok:alpine
+    container_name: ptt-ngrok
+    restart: unless-stopped
+    depends_on:
+      ptt-server:
+        condition: service_healthy
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN:?set NGROK_AUTHTOKEN in .env — see https://dashboard.ngrok.com}
+      # Optional: a reserved domain, so the address survives a restart. Free accounts get one.
+      NGROK_DOMAIN: ${NGROK_DOMAIN:-}
+    volumes:
+      - ./docker/ngrok.yml:/etc/ngrok.yml:ro
+    ports:
+      # The agent's inspector, for deploy/ngrok-url.sh. Loopback only: it can replay requests.
+      - "127.0.0.1:4040:4040"
+    # A shell, so the reserved domain can be left unset without passing an empty --url flag.
+    # `$$` escapes the substitution so the container's shell expands it, not Compose.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        exec ngrok http "ptt-server:${PTT_PORT:-8000}"
+        --config /etc/ngrok.yml
+        --log stdout --log-format logfmt
+        $${NGROK_DOMAIN:+--url=$$NGROK_DOMAIN}

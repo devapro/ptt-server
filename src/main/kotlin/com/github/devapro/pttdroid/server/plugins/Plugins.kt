@@ -8,6 +8,7 @@ import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.server.plugins.forwardedheaders.XForwardedHeaders
 import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.http.ContentType
 import io.ktor.server.response.respondText
@@ -29,6 +30,13 @@ fun Application.pttModule(
 ) {
     install(ContentNegotiation) {
         json(ProtocolJson)
+    }
+
+    // Behind ngrok or any reverse proxy every connection appears to come from the proxy, so
+    // logs name the tunnel instead of the peer. Opt-in, because a client can forge these
+    // headers when nothing in front of us is overwriting them.
+    if (config.trustForwardedHeaders) {
+        install(XForwardedHeaders)
     }
 
     install(WebSockets) {

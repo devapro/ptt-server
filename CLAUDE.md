@@ -4,9 +4,10 @@ Ktor WebSocket audio relay for the PTT client (`../ptt-client-android`), rewritt
 prototype into a proper module under
 `src/main/kotlin/com/github/devapro/pttdroid/server/`: `Main.kt`, `Config.kt`,
 `protocol/Messages.kt`, `domain/{PttSession,PttChannel,ChannelRegistry}.kt`,
-`plugins/Plugins.kt`, `routing/ChannelRoutes.kt`. Per-channel isolation and server-enforced floor
-control are implemented and covered by 14 passing tests
-(`src/test/kotlin/.../ChannelRelayTest.kt`). CI: `.github/workflows/ci.yml`.
+`plugins/Plugins.kt`, `routing/ChannelRoutes.kt`, `tls/ServerKeyStore.kt`. Per-channel isolation,
+server-enforced floor control, optional TLS with a self-signed certificate and an optional shared
+access token are implemented and covered by 45 passing tests (`src/test/kotlin/.../`).
+CI: `.github/workflows/ci.yml`.
 
 Docs index: [`docs/`](docs). **[`docs/protocol.md`](docs/protocol.md) is the canonical wire
 contract for this whole product — this repo owns it, the client must follow it, not the other
@@ -15,10 +16,18 @@ way around.**
 ## Build / test / run
 
 ```bash
-./gradlew build              # compile + run tests
+./gradlew build              # compile + run the 45 tests
 ./gradlew run                # run the server in place, blocks in foreground
 ./gradlew installDist        # produce a runnable distribution (build/install/PTTdroidServer/...)
-docker compose up --build    # containerized run (Dockerfile + docker-compose.yml)
+
+cp .env.example .env         # compose reads this; TLS and ngrok overlays require values in it
+docker compose up -d --build                                          # ws://  on the LAN
+docker compose -f docker-compose.yml -f docker-compose.tls.yml   up -d --build   # wss://
+docker compose -f docker-compose.yml -f docker-compose.ngrok.yml up -d --build   # public tunnel
+
+./deploy/fingerprint.sh      # the SHA-256 clients pin
+./deploy/ngrok-url.sh        # the public address, as client settings
+./deploy/deploy.sh --dry-run # what a remote deploy would do
 ```
 
 Prerequisite: **JDK 21** (`kotlin { jvmToolchain(21) }` in `build.gradle.kts`; `settings.gradle.kts`
@@ -43,8 +52,19 @@ Details: [`docs/deployment.md`](docs/deployment.md).
   path) — see `resources/logback.xml`, which keeps `io.netty`/`io.ktor` at WARN/INFO precisely so
   connect/disconnect/floor events at INFO aren't buried, and so nobody is tempted to add
   per-frame logging back in.
-- Run the build gate (`./gradlew build`) before declaring work done — this runs the 14
-  `ChannelRelayTest` cases.
+- Run the build gate (`./gradlew build`) before declaring work done — this runs all 45 tests.
+- **Never regenerate the TLS keystore as a side effect.** Clients pin one exact certificate by
+  fingerprint, so a new keypair silently locks out every paired handset. `ServerKeyStore` only
+  generates when the file is absent, and `docker-compose.yml` keeps it on the `ptt-certs` volume.
+- **Secrets go in headers, never in the URL.** `X-PTT-Token` is a header because a URL reaches
+  proxy access logs, ngrok's inspector and this server's own error logging.
+- **Compare secrets with `MessageDigest.isEqual`,** not `==`.
+- **Check auth before anything else in the handshake,** so an error code cannot be used to probe
+  which channels exist.
+- **`welcome` must remain the first frame on the socket.** The join `peers` broadcast excludes the
+  joiner for this reason (`PttChannel.broadcastLocked(exceptId = ...)`); the client repo's
+  `InternalPttServer` does the same. Pinned by a test in `ChannelRelayTest`.
+- **Never commit `.env`, `certs/` or a keystore.** `.gitignore` covers them; keep it that way.
 - Do not touch `gradle/` or `*.gradle.kts` unless the task is specifically about the build files —
   another workstream may own them concurrently.
 
@@ -61,5 +81,7 @@ non-suspending `trySend` per peer.
 
 ## Not implemented
 
-No auth, no TLS (`ws://` only) — see `docs/architecture.md`'s "Not implemented" section before
-assuming otherwise.
+One shared token, not accounts: no per-user credentials, no revocation, no audit trail. No rate
+limiting on the handshake. No audio compression. See the "Not implemented" sections in
+[`README.md`](README.md) and `docs/architecture.md`, and the security posture checklist in
+[`docs/deployment.md`](docs/deployment.md), before assuming otherwise.

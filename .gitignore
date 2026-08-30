@@ -37,3 +37,11 @@ bin/
 
 ### Mac OS ###
 .DS_Store
+### PTT relay ###
+# Carries the auth token and keystore password.
+.env
+# The TLS keypair. Never commit a private key; the server regenerates one if it is missing.
+certs/
+*.p12
+*.jks
+*.p12.sha256

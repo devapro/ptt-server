@@ -1,0 +1,51 @@
+# Run the relay directly under systemd, without Docker.
+#
+#   ./gradlew installDist
+#   sudo useradd --system --home /opt/ptt-server --shell /usr/sbin/nologin ptt
+#   sudo mkdir -p /opt/ptt-server && sudo cp -r build/install/PTTdroidServer /opt/ptt-server/
+#   sudo cp deploy/ptt-server.env.example /etc/ptt-server.env && sudoedit /etc/ptt-server.env
+#   sudo cp deploy/ptt-server.service /etc/systemd/system/
+#   sudo chown -R ptt:ptt /opt/ptt-server
+#   sudo systemctl daemon-reload && sudo systemctl enable --now ptt-server
+#
+# Then: journalctl -u ptt-server -f
+[Unit]
+Description=PTT WebSocket audio relay
+Documentation=https://github.com/devapro/ptt-server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ptt
+Group=ptt
+WorkingDirectory=/opt/ptt-server
+EnvironmentFile=/etc/ptt-server.env
+ExecStart=/opt/ptt-server/PTTdroidServer/bin/PTTdroidServer
+Restart=on-failure
+RestartSec=5s
+
+# The JVM shutdown hook drains connections with a 1s grace period and a 5s timeout, so give it
+# room to finish rather than killing mid-transmission.
+KillSignal=SIGTERM
+TimeoutStopSec=20s
+
+# Below 1024 you also need AmbientCapabilities=CAP_NET_BIND_SERVICE. Prefer a high port and a
+# reverse proxy or a redirect.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=false
+# The keystore is written here on first boot, so this one path stays writable.
+ReadWritePaths=/opt/ptt-server/certs
+
+[Install]
+WantedBy=multi-user.target

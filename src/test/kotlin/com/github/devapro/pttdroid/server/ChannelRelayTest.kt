@@ -33,14 +33,7 @@ import kotlin.test.assertTrue
  */
 class ChannelRelayTest {
 
-    private val config = ServerConfig(
-        host = "0.0.0.0",
-        port = 0,
-        maxAudioFrameBytes = 8_192,
-        pingSeconds = 15,
-        maxChannel = 99,
-        outboundQueueSize = 64,
-    )
+    private val config = testConfig()
 
     private fun ApplicationTestBuilder.pttClient() = createClient {
         install(ClientWebSockets)
@@ -345,5 +338,46 @@ class ChannelRelayTest {
         client.webSocket("/channel/50?v=1") { expect<Welcome>() }
         val body = client.get("/health").bodyAsText()
         assertTrue(body.contains("\"channels\":0"), "channel should be reaped: $body")
+    }
+
+    @Test
+    fun `welcome really is the first frame, not merely the first one anybody waited for`() =
+        testApplication {
+            application { pttModule(config) }
+            val client = pttClient()
+
+            client.webSocket("/channel/1") {
+                // Someone is already here, so the join broadcasts a peer count. That count is
+                // already inside the welcome, and a client is entitled to read the first frame
+                // as its welcome — the spec says so.
+                val first = incoming.receive()
+                assertTrue(first is Frame.Text)
+                val message = ProtocolJson.decodeFromString<ServerMessage>((first as Frame.Text).readText())
+                assertTrue(message is Welcome, "first frame was $message")
+
+                client.webSocket("/channel/1") {
+                    val firstForSecond = incoming.receive()
+                    val decoded = ProtocolJson.decodeFromString<ServerMessage>(
+                        (firstForSecond as Frame.Text).readText(),
+                    )
+                    assertTrue(decoded is Welcome, "first frame was $decoded")
+                    assertEquals(2, (decoded as Welcome).peers)
+                }
+            }
+        }
+
+    @Test
+    fun `an existing member still learns that someone joined`() = testApplication {
+        application { pttModule(config) }
+        val client = pttClient()
+
+        client.webSocket("/channel/1") {
+            expect<Welcome>()
+            client.webSocket("/channel/1") {
+                expect<Welcome>()
+            }
+            // Not suppressed for everyone — only for the joiner.
+            assertEquals(2, expect<Peers>().count)
+        }
     }
 }
