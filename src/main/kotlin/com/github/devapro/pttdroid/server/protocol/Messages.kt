@@ -31,6 +31,17 @@ data object TalkRequest : ClientMessage
 @SerialName("talk_release")
 data object TalkRelease : ClientMessage
 
+/**
+ * Liveness probe. Answered with [Pong], and it touches no channel state.
+ *
+ * Deliberately separate from a WebSocket ping frame: the engines answer those themselves and
+ * never surface either direction to application code, so a client holding an idle socket cannot
+ * tell a healthy link from one whose peer vanished. This one both applications can see.
+ */
+@Serializable
+@SerialName("ping")
+data object Ping : ClientMessage
+
 /** Control messages sent by the server on a text frame. */
 @Serializable
 sealed interface ServerMessage
@@ -63,6 +74,11 @@ data class Peers(val count: Int) : ServerMessage
 @Serializable
 @SerialName("error")
 data class ProtocolError(val code: String, val message: String) : ServerMessage
+
+/** Answer to [Ping]. Carries nothing: its arrival is the whole message. */
+@Serializable
+@SerialName("pong")
+data object Pong : ServerMessage
 
 /** Body of `GET /health`. A typed class, because kotlinx-serialization cannot encode Map<String, Any>. */
 @Serializable

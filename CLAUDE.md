@@ -16,7 +16,7 @@ way around.**
 ## Build / test / run
 
 ```bash
-./gradlew build              # compile + run the 45 tests
+./gradlew build              # compile + run the 47 tests
 ./gradlew run                # run the server in place, blocks in foreground
 ./gradlew installDist        # produce a runnable distribution (build/install/PTTdroidServer/...)
 
@@ -54,7 +54,7 @@ in sync when a setup step or a failure mode changes — is
   path) — see `resources/logback.xml`, which keeps `io.netty`/`io.ktor` at WARN/INFO precisely so
   connect/disconnect/floor events at INFO aren't buried, and so nobody is tempted to add
   per-frame logging back in.
-- Run the build gate (`./gradlew build`) before declaring work done — this runs all 45 tests.
+- Run the build gate (`./gradlew build`) before declaring work done — this runs all 47 tests.
 - **Never regenerate the TLS keystore as a side effect.** Clients pin one exact certificate by
   fingerprint, so a new keypair silently locks out every paired handset. `ServerKeyStore` only
   generates when the file is absent, and `docker-compose.yml` keeps it on the `ptt-certs` volume.

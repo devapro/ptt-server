@@ -7,6 +7,8 @@ import com.github.devapro.pttdroid.server.domain.PttSession
 import com.github.devapro.pttdroid.server.protocol.ErrorCodes
 import com.github.devapro.pttdroid.server.protocol.HealthResponse
 import com.github.devapro.pttdroid.server.protocol.PROTOCOL_VERSION
+import com.github.devapro.pttdroid.server.protocol.Ping
+import com.github.devapro.pttdroid.server.protocol.Pong
 import com.github.devapro.pttdroid.server.protocol.ProtocolError
 import com.github.devapro.pttdroid.server.protocol.TalkRelease
 import com.github.devapro.pttdroid.server.protocol.TalkRequest
@@ -243,5 +245,8 @@ private suspend fun handleControl(
                 log.info("Floor released by {} on channel {}", session.id, channelId)
             }
         }
+        // Liveness probe. Answered and nothing else: it touches no channel state, and one line
+        // per client every few seconds would bury everything worth reading in the log.
+        Ping -> session.send(Pong)
     }
 }

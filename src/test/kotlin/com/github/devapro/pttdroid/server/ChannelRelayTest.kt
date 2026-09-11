@@ -4,6 +4,7 @@ import com.github.devapro.pttdroid.server.plugins.pttModule
 import com.github.devapro.pttdroid.server.protocol.ErrorCodes
 import com.github.devapro.pttdroid.server.protocol.Floor
 import com.github.devapro.pttdroid.server.protocol.Peers
+import com.github.devapro.pttdroid.server.protocol.Pong
 import com.github.devapro.pttdroid.server.protocol.ProtocolError
 import com.github.devapro.pttdroid.server.protocol.ProtocolJson
 import com.github.devapro.pttdroid.server.protocol.ServerMessage
@@ -287,6 +288,36 @@ class ChannelRelayTest {
 
             // Second client gone.
             assertEquals(1, alice.expect<Peers>().count)
+        }
+    }
+
+    @Test
+    fun `ping is answered with pong`() = testApplication {
+        application { pttModule(config) }
+        pttClient().webSocket("/channel/9?v=1") {
+            expect<Welcome>()
+            // Spelt out rather than encoded, so this pins the wire shape the client sends.
+            send(Frame.Text("""{"type":"ping"}"""))
+            assertEquals(Pong, expect<Pong>())
+        }
+    }
+
+    @Test
+    fun `a ping does not disturb the floor`() = testApplication {
+        application { pttModule(config) }
+        val client = pttClient()
+        client.webSocket("/channel/10?v=1") {
+            val alice = this
+            alice.expect<Welcome>()
+            alice.send(Frame.Text("""{"type":"talk_request"}"""))
+            alice.expectFloor { it.isSelf }
+
+            alice.send(Frame.Text("""{"type":"ping"}"""))
+            alice.expect<Pong>()
+
+            // Still ours: a probe is not a floor operation.
+            alice.send(Frame.Text("""{"type":"talk_request"}"""))
+            assertTrue(alice.expectFloor { it.isSelf }.isSelf)
         }
     }
 

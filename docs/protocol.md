@@ -9,8 +9,8 @@ Protocol v1 is implemented on both sides. Server source:
 and
 [`routing/ChannelRoutes.kt`](../src/main/kotlin/com/github/devapro/pttdroid/server/routing/ChannelRoutes.kt).
 Client source:
-[`network/protocol/Messages.kt`](../../ptt-client-android/app/src/main/java/com/github/devapro/pttdroid/network/protocol/Messages.kt)
-and [`network/KtorPttConnection.kt`](../../ptt-client-android/app/src/main/java/com/github/devapro/pttdroid/network/KtorPttConnection.kt).
+[`network/protocol/Messages.kt`](../../ptt-client-android/shared/src/commonMain/kotlin/com/github/devapro/pttdroid/network/protocol/Messages.kt)
+and [`network/KtorPttConnection.kt`](../../ptt-client-android/shared/src/commonMain/kotlin/com/github/devapro/pttdroid/network/KtorPttConnection.kt).
 
 ## Connect URL
 
@@ -64,14 +64,15 @@ config, default 8192) or of odd length is rejected with `frame_too_large` and ne
 
 ## Control messages (JSON over Text frames)
 
-**Client → server** (`Messages.kt:24-32`):
+**Client → server** (`Messages.kt:24-43`):
 
 | Type | Payload | Meaning |
 |---|---|---|
 | `talk_request` | `{}` | Client wants the floor |
 | `talk_release` | `{}` | Client releases the floor |
+| `ping` | `{}` | Liveness probe. Answered with `pong`, touches no channel state — see [Keepalive](#keepalive) |
 
-**Server → client** (`Messages.kt:34-65`):
+**Server → client** (`Messages.kt:45-81`):
 
 | Type | Payload | Meaning |
 |---|---|---|
@@ -79,6 +80,7 @@ config, default 8192) or of odd length is rejected with `frame_too_large` and ne
 | `floor` | `{holderId?, holderName?, isSelf}` | Who holds the floor, rendered **per recipient** — `isSelf` differs for each session even though the underlying holder is the same (`PttChannel.kt:96-103`) |
 | `peers` | `{count}` | Peer-count update on join/leave, broadcast to the channel **except the joiner** — their count is already in `welcome`, and sending it would land ahead of the welcome |
 | `error` | `{code, message}` | A rejected request or handshake failure |
+| `pong` | `{}` | Answer to `ping`. Carries nothing: its arrival is the whole message |
 
 ### Error codes (`Messages.kt:77-84`)
 
@@ -114,6 +116,34 @@ Enforced per channel in `PttChannel.kt`:
   `floor{holderId: null}` (`releaseFloor`, `PttChannel.kt:69-74`; release-on-disconnect in
   `PttChannel.leave`, `PttChannel.kt:36-44`).
 
+## Keepalive
+
+Two independent mechanisms, at two layers, and they are not interchangeable.
+
+**WebSocket ping frames** are the transport's own. The server sends them every `pingSeconds`
+(default 15, see [configuration.md](configuration.md)) and drops a session that has not answered
+within the same period, which is how a client that vanished stops counting as a peer. Every
+WebSocket engine answers them automatically — and *that is the problem*: none of them surface
+either direction to application code. Neither peer's application can ask "when did I last hear
+anything?", and a client whose network disappeared sits in its read loop with no error, no close
+frame, and nothing to notice, still showing "connected" until its next write finally fails.
+
+**`ping` / `pong` control messages** exist for exactly that gap. They are ordinary Text frames,
+visible to both applications:
+
+- The client probes only when it has heard nothing for one keepalive interval — audio, `floor`,
+  `peers` or an earlier `pong` all count as proof of life, so a busy channel is never probed.
+- The server answers immediately, before any channel lookup and without touching floor state. A
+  probe is not a floor operation and must never queue behind one.
+- The client treats a run of unanswered intervals as a dead socket and reconnects. Nothing on the
+  server depends on the probe; a client that never pings is a perfectly conformant client.
+
+**A `ping` against a relay older than this section is safe**, and does not need a version bump to
+be: the text frame fails to decode, the server replies `error{malformed_message}`, and *that
+answer is itself proof the link is alive* — which is all the probe was asking. The client keeps
+such an answer out of the user's way (it is logged, not shown) precisely so an older relay stays
+usable.
+
 ## Fan-out mechanism
 
 Each session owns a bounded `Channel<Frame>(capacity = outboundQueueSize, DROP_OLDEST)` drained
@@ -142,6 +172,7 @@ send `welcome`  (always first)
 for each incoming frame:
     Binary → validate size/parity → channel.relayAudio (only if floor holder)
     Text   → decode → talk_request / talk_release → channel.requestFloor / releaseFloor
+                     → ping → `pong` straight back (no channel involvement)
         │
         ▼ (loop ends on close, error, or cancellation)
 registry.leaveChannel(id, session.id)
@@ -181,4 +212,4 @@ Protocol v1, as described above, fixes every defect the pre-refactor version of 
 recorded as "planned": channel isolation is enforced (not just parsed), floor control is
 server-side, and both are covered by
 [`ChannelRelayTest.kt`](../src/test/kotlin/com/github/devapro/pttdroid/server/ChannelRelayTest.kt)
-(45 tests, all passing).
+(47 tests, all passing).

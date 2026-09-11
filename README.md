@@ -135,7 +135,7 @@ Internals and the full before/after table: [`docs/architecture.md`](docs/archite
 ## Build gate
 
 ```bash
-./gradlew build      # compiles and runs 45 tests
+./gradlew build      # compiles and runs 47 tests
 ```
 
 `ChannelRelayTest` drives real WebSocket clients against a real server: channel isolation, one

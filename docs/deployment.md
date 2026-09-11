@@ -193,7 +193,7 @@ enough to survive being on the internet — not a multi-tenant service.
 ## CI
 
 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on push to `main`, tags matching
-`v*`, and pull requests: sets up JDK 21 (Temurin), runs `./gradlew build` (compile + 45 tests),
+`v*`, and pull requests: sets up JDK 21 (Temurin), runs `./gradlew build` (compile + 47 tests),
 uploads the test report, builds `distTar`, uploads that artifact, and
 (in a second job depending on the first) builds the Docker image.
 
