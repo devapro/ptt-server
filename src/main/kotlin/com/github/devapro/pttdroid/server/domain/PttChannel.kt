@@ -90,11 +90,29 @@ class PttChannel(val id: Int) {
     /**
      * Relays an audio frame to every other session on this channel. Returns false when the
      * sender does not hold the floor, in which case nothing is relayed.
+     *
+     * Each peer gets its OWN [Frame.Binary] instance. Ktor's JVM [Frame] wraps its payload in a
+     * `buffer: ByteBuffer` field created once per instance (`ByteBuffer.wrap(data)`), and that
+     * field carries mutable read state (position/limit). Handing the SAME `Frame.Binary` to
+     * every peer's outbound queue means every peer's writer coroutine — each running
+     * concurrently, one per session — reads that one shared `ByteBuffer` while serializing to
+     * its own socket, corrupting or truncating whichever write loses the race. This only shows
+     * up at 3+ participants (2+ other peers racing), which is why a 2-user channel always
+     * looked fine.
+     *
+     * No array copy is needed: [frame]'s `data` is a fresh `ByteArray` produced once per
+     * inbound frame by Ktor's `WebSocketReader`/`SimpleFrameCollector` (never pooled or reused
+     * across frames), and constructing a new `Frame.Binary` per peer gives each one its own
+     * `ByteBuffer.wrap(data)` with an independent position/limit — reading through a
+     * `ByteBuffer` never mutates the backing array. Sharing the payload array across the N new
+     * instances is therefore safe and keeps this per-audio-frame path allocation-light (one
+     * `Frame.Binary` per peer, no `ByteArray` copies).
      */
     suspend fun relayAudio(sessionId: String, frame: Frame.Binary): Boolean = mutex.withLock {
         if (floorHolderId != sessionId) return@withLock false
+        val payload = frame.data
         for ((peerId, peer) in sessions) {
-            if (peerId != sessionId) peer.offer(frame)
+            if (peerId != sessionId) peer.offer(Frame.Binary(frame.fin, payload))
         }
         true
     }

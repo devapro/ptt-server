@@ -71,6 +71,7 @@ own writer coroutine, not the sender's.
 | No config | Port/host/limits hardcoded | `ServerConfig.fromEnv()` (`Config.kt`) — see [configuration.md](configuration.md) |
 | No floor control | Every sender's frames relayed to everyone, always | `PttChannel` tracks one holder per channel; non-holder audio dropped with rate-limited `not_floor_holder` |
 | No graceful shutdown | N/A | `Runtime.addShutdownHook` calls `server.stop(gracePeriodMillis, timeoutMillis)` (`Main.kt:25-30`) |
+| Audio corrupted at 3+ listeners | `relayAudio` offered the SAME `Frame.Binary` instance to every peer; Ktor's JVM `Frame` stores its payload behind a `buffer: ByteBuffer` created once per instance, so peers' writer coroutines raced over that one shared buffer's position/limit while serializing — worked with one other peer, broke with two or more ("if more than 2 users on channel nobody hear each other") | `relayAudio` (`PttChannel.kt`) constructs a fresh `Frame.Binary(frame.fin, payload)` per peer, matching what `broadcastLocked`/`broadcastFloorLocked` already did for control messages; pinned by `ChannelRelayTest`'s *"every peer gets a byte-for-byte-correct copy of every frame with three or more listeners"* |
 
 ## Transport security
 

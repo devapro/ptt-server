@@ -21,6 +21,7 @@ import io.ktor.websocket.readBytes
 import io.ktor.websocket.readText
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -88,6 +89,14 @@ class ChannelRelayTest {
 
     private fun audio(byte: Int, size: Int = 320) = ByteArray(size) { byte.toByte() }
 
+    /**
+     * A distinct byte pattern per [seed], not a single repeated value — the fan-out bug this
+     * pins truncates or garbles frames rather than dropping them outright, and a buffer of one
+     * repeated byte would still "match" after truncation to all-zero or partial reads far more
+     * often than a pattern that varies byte-to-byte.
+     */
+    private fun audioPattern(seed: Int, size: Int = 320) = ByteArray(size) { (seed + it).toByte() }
+
     @Test
     fun `welcome arrives first with channel and audio params`() = testApplication {
         application { pttModule(config) }
@@ -140,6 +149,61 @@ class ChannelRelayTest {
             }
         }
     }
+
+    @Test
+    fun `every peer gets a byte-for-byte-correct copy of every frame with three or more listeners`() =
+        testApplication {
+            application { pttModule(config) }
+            val client = pttClient()
+
+            client.webSocket("/channel/13?name=Alice&v=1") {
+                val alice = this
+                alice.expect<Welcome>()
+
+                client.webSocket("/channel/13?name=Bob&v=1") {
+                    val bob = this
+                    bob.expect<Welcome>()
+
+                    client.webSocket("/channel/13?name=Carol&v=1") {
+                        val carol = this
+                        carol.expect<Welcome>()
+
+                        alice.send(Frame.Text("""{"type":"talk_request"}"""))
+                        assertTrue(alice.expect<Floor>().isSelf, "Alice should hold the floor")
+
+                        // A single Frame.Binary instance fanned out to N>=2 peers means N
+                        // writer coroutines race over the SAME ByteBuffer's position/limit —
+                        // this only shows up with two or more OTHER listeners, i.e. three or
+                        // more clients total. Several distinct frames back-to-back gives the
+                        // race more chances to land.
+                        val frames = List(5) { audioPattern(seed = it * 17) }
+                        for (payload in frames) {
+                            alice.send(Frame.Binary(true, payload))
+                        }
+
+                        for ((index, payload) in frames.withIndex()) {
+                            val heardByBob = bob.nextBinaryOrNull()
+                            assertNotNull(heardByBob, "Bob must receive frame #$index")
+                            assertContentEquals(
+                                payload,
+                                heardByBob,
+                                "Bob's frame #$index must match byte-for-byte",
+                            )
+                        }
+
+                        for ((index, payload) in frames.withIndex()) {
+                            val heardByCarol = carol.nextBinaryOrNull()
+                            assertNotNull(heardByCarol, "Carol must receive frame #$index")
+                            assertContentEquals(
+                                payload,
+                                heardByCarol,
+                                "Carol's frame #$index must match byte-for-byte",
+                            )
+                        }
+                    }
+                }
+            }
+        }
 
     @Test
     fun `sender never receives its own audio echoed back`() = testApplication {

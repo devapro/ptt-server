@@ -45,3 +45,4 @@ certs/
 *.p12
 *.jks
 *.p12.sha256
+.idea/gradle.xml

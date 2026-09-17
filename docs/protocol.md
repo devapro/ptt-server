@@ -157,6 +157,21 @@ write. Consequences:
 - A write failure on one peer's socket surfaces in that peer's own writer coroutine, not in the
   sender's request-handling coroutine — one broken connection cannot take down another session.
 
+**Every peer must be offered its own `Frame` instance, never a shared one.** `broadcastLocked`
+and `broadcastFloorLocked` already did this correctly (`PttSession.send` builds a fresh
+`Frame.Text` per call). `relayAudio` did not: it offered the identical `Frame.Binary` received
+from the sender to every peer's queue. Ktor's JVM `Frame` stores its payload behind a
+`buffer: ByteBuffer` field created once per instance, and that field carries mutable read state
+(position/limit). With one other peer this happened to work; with two or more other peers (3+
+participants total) their writer coroutines raced over that one shared `ByteBuffer` while
+serializing to their own sockets, corrupting or truncating whichever write lost the race — the
+"if more than 2 users on channel nobody hear each other" defect. The fix constructs a fresh
+`Frame.Binary(frame.fin, payload)` per peer inside the loop, reusing the same payload `ByteArray`
+(safe: it is a fresh array per inbound frame, never pooled/reused, and reading through a
+`ByteBuffer` never mutates the array it wraps) while giving each peer its own `ByteBuffer`.
+Regression test: `ChannelRelayTest` — *"every peer gets a byte-for-byte-correct copy of every
+frame with three or more listeners"*.
+
 ## Session lifecycle
 
 ```
