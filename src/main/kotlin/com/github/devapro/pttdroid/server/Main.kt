@@ -15,6 +15,16 @@ private val log = LoggerFactory.getLogger("Main")
 fun main() {
     val config = ServerConfig.fromEnv()
 
+    if (config.accessToken.toByteArray(Charsets.UTF_8).size < 32) {
+        log.error("Refusing to start: PTT_AUTH_TOKEN must contain at least 32 bytes")
+        exitProcess(1)
+    }
+
+    if (config.plaintextEnabled || !config.tls.enabled) {
+        log.error("Refusing to start: TLS must be enabled and plaintext disabled")
+        exitProcess(1)
+    }
+
     if (!config.plaintextEnabled && !config.tls.enabled) {
         log.error("PTT_HTTP_ENABLED and PTT_TLS_ENABLED are both off — nothing to listen on")
         exitProcess(1)

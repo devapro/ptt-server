@@ -29,10 +29,7 @@ services:
       # The TLS keypair, so a restart does not invalidate every client's pinned fingerprint.
       - ptt-certs:/app/certs
     logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+      driver: "none"
 
 volumes:
   ptt-certs:
